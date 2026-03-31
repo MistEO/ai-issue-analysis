@@ -106,7 +106,7 @@ runs:
   steps:
     - name: Checkout repository
       if: ${{ inputs.checkout-repository == 'true' }}
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Determine issue number
       id: issue_number
@@ -222,7 +222,7 @@ runs:
 
     - name: Create initial comment
       id: initial_comment
-      uses: peter-evans/create-or-update-comment@v4
+      uses: peter-evans/create-or-update-comment@v5
       with:
         issue-number: ${{ steps.issue_number.outputs.issue_number }}
         token: ${{ inputs.github-token }}
