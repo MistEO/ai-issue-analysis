@@ -30,7 +30,7 @@ jobs:
       # - .claude/skills/generic-issue-log-analysis/SKILL.md
       - name: Analyze issue with AI
         id: analysis
-        uses: Misteo/ai-issue-analysis@main
+        uses: MistEO/ai-issue-analysis@main
         with:
           # 请在 https://github.com/settings/personal-access-tokens 添加一个token，填写到仓库 secret 里（请确保你有 Copilot Pro）
           copilot-github-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}

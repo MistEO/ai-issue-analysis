@@ -1,0 +1,43 @@
+name: AI Issue Analysis (Cursor)
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to analyze"
+        required: true
+        type: number
+
+jobs:
+  cursor-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # 本仓库 CI 使用本地 action；接入方请改为 MistEO/ai-issue-analysis@main
+      - name: Analyze issue with Cursor
+        id: analysis
+        uses: ./
+        with:
+          ai-provider: cursor
+          cursor-api-key: ${{ secrets.CURSOR_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          bot-name: "@github-actions"
+
+      - name: Print outputs
+        if: always()
+        env:
+          ANALYSIS_PROMPT: ${{ steps.analysis.outputs.analysis-prompt }}
+          ISSUE_NUMBER: ${{ steps.analysis.outputs.issue-number }}
+          COMMENT_ID: ${{ steps.analysis.outputs.comment-id }}
+          COMMENT_URL: ${{ steps.analysis.outputs.comment-url }}
+          COPILOT_OUTPUT: ${{ steps.analysis.outputs.copilot-output }}
+          FINAL_CONCLUSION: ${{ steps.analysis.outputs.final-conclusion }}
+        run: |
+          printf '%s\n' "$ANALYSIS_PROMPT"
+          echo "issue_number=$ISSUE_NUMBER"
+          echo "comment_id=$COMMENT_ID"
+          echo "comment_url=$COMMENT_URL"
+          printf '%s\n' "$COPILOT_OUTPUT"
+          printf '%s\n' "$FINAL_CONCLUSION"

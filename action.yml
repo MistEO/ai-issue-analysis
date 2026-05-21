@@ -1,5 +1,5 @@
 name: AI Issue Analysis
-description: Analyze a GitHub issue with Copilot CLI and keep a comment updated with progress and the final result.
+description: Analyze a GitHub issue with Copilot CLI or Cursor CLI and keep a comment updated with progress and the final result.
 author: MistEO
 
 inputs:
@@ -11,8 +11,9 @@ inputs:
     description: GitHub token used to create and update issue comments.
     required: true
   copilot-github-token:
-    description: Fine-grained GitHub token with Copilot access for the Copilot CLI. Supports multiple tokens, one per line, and randomly picks one.
-    required: true
+    description: Fine-grained GitHub token with Copilot access for the Copilot CLI. Required at runtime when ai-provider is copilot. Supports multiple tokens, one per line, and randomly picks one.
+    required: false
+    default: ""
   bot-name:
     description: Bot mention to strip from issue_comment messages before appending extra requirements.
     required: false
@@ -80,6 +81,18 @@ inputs:
     description: Extra content always appended at the bottom of every comment update. Empty by default.
     required: false
     default: ""
+  ai-provider:
+    description: AI backend to use. Supported values are copilot and cursor. Defaults to copilot when empty.
+    required: false
+    default: copilot
+  cursor-api-key:
+    description: Cursor API key for Cursor CLI. Required at runtime when ai-provider is cursor. Supports multiple keys, one per line, and randomly picks one.
+    required: false
+    default: ""
+  cursor-model:
+    description: Cursor CLI model name passed to cursor-agent --model.
+    required: false
+    default: composer-2.5
 
 outputs:
   issue-number:
@@ -92,13 +105,13 @@ outputs:
     description: The URL of the issue comment that was created and then updated.
     value: ${{ steps.export_results.outputs.comment-url }}
   analysis-prompt:
-    description: Final rendered prompt passed to Copilot for this run.
+    description: Final rendered prompt passed to the AI backend for this run.
     value: ${{ steps.export_results.outputs.analysis-prompt }}
   copilot-output:
-    description: Execution log including pre-run parameters, prompt, and Copilot stdout and stderr.
+    description: Execution log including pre-run parameters, prompt, and AI CLI stdout and stderr.
     value: ${{ steps.export_results.outputs.copilot-output }}
   final-conclusion:
-    description: Final conclusion content produced by Copilot.
+    description: Final conclusion content written to copilot-answer-file.
     value: ${{ steps.export_results.outputs.final-conclusion }}
 
 runs:
@@ -135,6 +148,47 @@ runs:
 
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
             fh.write(f"issue_number={issue_number}\n")
+        PY
+
+    - name: Resolve AI provider
+      id: provider
+      shell: bash
+      env:
+        INPUT_AI_PROVIDER: ${{ inputs.ai-provider }}
+      run: |
+        python <<'PY'
+        import os
+
+        provider = os.environ["INPUT_AI_PROVIDER"].strip().lower() or "copilot"
+        if provider not in {"copilot", "cursor"}:
+            raise SystemExit(f"Unsupported ai-provider: {provider}. Supported values: copilot, cursor.")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+            fh.write(f"provider={provider}\n")
+        PY
+
+    - name: Validate provider credentials
+      shell: bash
+      env:
+        AI_PROVIDER: ${{ steps.provider.outputs.provider }}
+        INPUT_CURSOR_API_KEY: ${{ inputs.cursor-api-key }}
+        INPUT_COPILOT_GITHUB_TOKEN: ${{ inputs.copilot-github-token }}
+      run: |
+        python <<'PY'
+        import os
+
+        provider = os.environ["AI_PROVIDER"]
+
+        if provider == "cursor":
+            raw_value = os.environ["INPUT_CURSOR_API_KEY"]
+            keys = [line.strip() for line in raw_value.splitlines() if line.strip()]
+            if not keys:
+                raise SystemExit("Input cursor-api-key is required when ai-provider=cursor.")
+        elif provider == "copilot":
+            raw_value = os.environ["INPUT_COPILOT_GITHUB_TOKEN"]
+            tokens = [line.strip() for line in raw_value.splitlines() if line.strip()]
+            if not tokens:
+                raise SystemExit("Input copilot-github-token is required when ai-provider=copilot.")
         PY
 
     - name: Prepare runtime files
@@ -232,11 +286,21 @@ runs:
           ${{ steps.runtime.outputs.action_link }}
 
     - name: Install Copilot CLI
+      if: ${{ steps.provider.outputs.provider == 'copilot' }}
       shell: bash
       run: npm install -g "${{ inputs.copilot-package }}"
 
+    - name: Install Cursor CLI
+      if: ${{ steps.provider.outputs.provider == 'cursor' }}
+      shell: bash
+      run: |
+        curl https://cursor.com/install -fsS | bash
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        cursor-agent --version
+
     - name: Resolve Copilot token
       id: resolve_copilot_token
+      if: ${{ steps.provider.outputs.provider == 'copilot' }}
       shell: bash
       env:
         INPUT_COPILOT_GITHUB_TOKEN: ${{ inputs.copilot-github-token }}
@@ -253,15 +317,45 @@ runs:
 
         selected_token = secrets.choice(tokens)
 
+        print(f"::add-mask::{selected_token}")
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+            fh.write(f"COPILOT_GITHUB_TOKEN={selected_token}\n")
+
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            fh.write(f"copilot_token={selected_token}\n")
             fh.write(f"copilot_token_count={len(tokens)}\n")
         PY
 
-    - name: Run Copilot analysis with streaming updates
+    - name: Resolve Cursor API key
+      id: resolve_cursor_api_key
+      if: ${{ steps.provider.outputs.provider == 'cursor' }}
       shell: bash
       env:
-        COPILOT_GITHUB_TOKEN: ${{ steps.resolve_copilot_token.outputs.copilot_token }}
+        INPUT_CURSOR_API_KEY: ${{ inputs.cursor-api-key }}
+      run: |
+        python <<'PY'
+        import os
+        import secrets
+
+        raw_value = os.environ["INPUT_CURSOR_API_KEY"]
+        keys = [line.strip() for line in raw_value.splitlines() if line.strip()]
+
+        if not keys:
+            raise SystemExit("Input cursor-api-key is required when ai-provider=cursor.")
+
+        selected_key = secrets.choice(keys)
+
+        print(f"::add-mask::{selected_key}")
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+            fh.write(f"CURSOR_API_KEY={selected_key}\n")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+            fh.write(f"cursor_api_key_count={len(keys)}\n")
+        PY
+
+    - name: Run AI analysis with streaming updates
+      shell: bash
+      env:
+        AI_PROVIDER: ${{ steps.provider.outputs.provider }}
         COMMENT_GITHUB_TOKEN: ${{ inputs.github-token }}
         GITHUB_SERVER_URL: ${{ github.server_url }}
         COMMENT_ID: ${{ steps.initial_comment.outputs.comment-id }}
@@ -277,6 +371,7 @@ runs:
         DETAILS_END: ${{ steps.runtime.outputs.details_end }}
         COPILOT_MODEL: ${{ inputs.copilot-model }}
         COPILOT_REASONING_EFFORT: ${{ inputs.copilot-reasoning-effort }}
+        CURSOR_MODEL: ${{ inputs.cursor-model }}
         STREAM_UPDATE_INTERVAL: ${{ inputs.stream-update-interval-seconds }}
         EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
       run: |
@@ -284,29 +379,57 @@ runs:
 
         : > "$OUTPUT_FILE"
         : > "$EXECUTION_LOG_FILE"
-        {
-          echo "Copilot invocation parameters:"
-          echo "  repo: $REPO"
-          echo "  issue-number: $ISSUE_NUMBER"
-          echo "  comment-id: $COMMENT_ID"
-          echo "  comment-url: $COMMENT_URL"
-          echo "  model: $COPILOT_MODEL"
-          echo "  reasoning-effort: $COPILOT_REASONING_EFFORT"
-          echo "  copilot-token-count: ${{ steps.resolve_copilot_token.outputs.copilot_token_count }}"
-          echo "  stream-update-interval-seconds: $STREAM_UPDATE_INTERVAL"
-          echo "  analysis-prompt-file: $ANALYSIS_PROMPT_FILE"
-          echo "  output-file: $OUTPUT_FILE"
-          echo "  body-file: $BODY_FILE"
-          echo "  command: copilot --yolo --model \"$COPILOT_MODEL\" --reasoning-effort \"$COPILOT_REASONING_EFFORT\" --prompt \"<contents of $ANALYSIS_PROMPT_FILE>\""
-          echo "Prompt content begins"
-          cat "$ANALYSIS_PROMPT_FILE"
-          echo "Prompt content ends"
-        } | tee -a "$EXECUTION_LOG_FILE"
 
-        copilot --yolo --model "$COPILOT_MODEL" --reasoning-effort "$COPILOT_REASONING_EFFORT" \
-          --prompt "$(cat "$ANALYSIS_PROMPT_FILE")" > "$OUTPUT_FILE" 2>&1 &
-        COPILOT_PID=$!
-        echo "Copilot started with PID $COPILOT_PID" | tee -a "$EXECUTION_LOG_FILE"
+        if [ "$AI_PROVIDER" = "cursor" ]; then
+          {
+            echo "Cursor invocation parameters:"
+            echo "  repo: $REPO"
+            echo "  issue-number: $ISSUE_NUMBER"
+            echo "  comment-id: $COMMENT_ID"
+            echo "  comment-url: $COMMENT_URL"
+            echo "  model: $CURSOR_MODEL"
+            echo "  cursor-api-key-count: ${{ steps.resolve_cursor_api_key.outputs.cursor_api_key_count }}"
+            echo "  stream-update-interval-seconds: $STREAM_UPDATE_INTERVAL"
+            echo "  analysis-prompt-file: $ANALYSIS_PROMPT_FILE"
+            echo "  output-file: $OUTPUT_FILE"
+            echo "  body-file: $BODY_FILE"
+            echo "  command: cursor-agent -p \"<contents of $ANALYSIS_PROMPT_FILE>\" --force --model \"$CURSOR_MODEL\" --output-format text"
+            echo "Prompt content begins"
+            cat "$ANALYSIS_PROMPT_FILE"
+            echo "Prompt content ends"
+          } | tee -a "$EXECUTION_LOG_FILE"
+
+          cursor-agent -p "$(cat "$ANALYSIS_PROMPT_FILE")" \
+            --force \
+            --model "$CURSOR_MODEL" \
+            --output-format text > "$OUTPUT_FILE" 2>&1 &
+          AGENT_PID=$!
+          echo "Cursor Agent started with PID $AGENT_PID" | tee -a "$EXECUTION_LOG_FILE"
+        else
+          {
+            echo "Copilot invocation parameters:"
+            echo "  repo: $REPO"
+            echo "  issue-number: $ISSUE_NUMBER"
+            echo "  comment-id: $COMMENT_ID"
+            echo "  comment-url: $COMMENT_URL"
+            echo "  model: $COPILOT_MODEL"
+            echo "  reasoning-effort: $COPILOT_REASONING_EFFORT"
+            echo "  copilot-token-count: ${{ steps.resolve_copilot_token.outputs.copilot_token_count }}"
+            echo "  stream-update-interval-seconds: $STREAM_UPDATE_INTERVAL"
+            echo "  analysis-prompt-file: $ANALYSIS_PROMPT_FILE"
+            echo "  output-file: $OUTPUT_FILE"
+            echo "  body-file: $BODY_FILE"
+            echo "  command: copilot --yolo --model \"$COPILOT_MODEL\" --reasoning-effort \"$COPILOT_REASONING_EFFORT\" --prompt \"<contents of $ANALYSIS_PROMPT_FILE>\""
+            echo "Prompt content begins"
+            cat "$ANALYSIS_PROMPT_FILE"
+            echo "Prompt content ends"
+          } | tee -a "$EXECUTION_LOG_FILE"
+
+          copilot --yolo --model "$COPILOT_MODEL" --reasoning-effort "$COPILOT_REASONING_EFFORT" \
+            --prompt "$(cat "$ANALYSIS_PROMPT_FILE")" > "$OUTPUT_FILE" 2>&1 &
+          AGENT_PID=$!
+          echo "Copilot started with PID $AGENT_PID" | tee -a "$EXECUTION_LOG_FILE"
+        fi
 
         last_content=""
 
@@ -314,9 +437,9 @@ runs:
           sleep "$STREAM_UPDATE_INTERVAL" &
           sleep_pid=$!
 
-          wait -n "$COPILOT_PID" "$sleep_pid" 2>/dev/null || true
+          wait -n "$AGENT_PID" "$sleep_pid" 2>/dev/null || true
 
-          if ! kill -0 "$COPILOT_PID" 2>/dev/null; then
+          if ! kill -0 "$AGENT_PID" 2>/dev/null; then
             kill "$sleep_pid" 2>/dev/null || true
             break
           fi
@@ -357,16 +480,24 @@ runs:
           fi
         done
 
-        wait "$COPILOT_PID"
+        wait "$AGENT_PID"
 
         {
           echo
-          echo "Copilot output begins"
+          if [ "$AI_PROVIDER" = "cursor" ]; then
+            echo "Cursor output begins"
+          else
+            echo "Copilot output begins"
+          fi
           if [ -f "$OUTPUT_FILE" ]; then
             cat "$OUTPUT_FILE"
           fi
           echo
-          echo "Copilot output ends"
+          if [ "$AI_PROVIDER" = "cursor" ]; then
+            echo "Cursor output ends"
+          else
+            echo "Copilot output ends"
+          fi
         } >> "$EXECUTION_LOG_FILE"
 
     - name: Full analysis
