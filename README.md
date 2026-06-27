@@ -1,103 +1,165 @@
 # ai-issue-analysis
 
-一个通用的 GitHub composite action，用来在 Issue 打开或被评论时调用 Copilot CLI 做分析，并把分析过程和最终结论持续回写到同一条评论里。
+一个通用的 GitHub action，在 Issue 打开或被评论时调用 AI coding agent（Copilot / Claude / Codex）进行分析，并把分析过程和最终结论持续回写到同一条评论里。
+
+通过 `agent` 参数一键切换后端，统一 `api-key`、`api-base-url`、`model` 等配置，无需维护多套 workflow。
 
 实战效果展示：
 
 - [Bot 自动分析回复 ISSUE: 加载时间过长导致拜访好友失败](https://github.com/MaaEnd/MaaEnd/issues/1361#issuecomment-4071450863)
 - [Bot 响应 @ 进行分析回复 ISSUE: 换班时会把训练室干员换下](https://github.com/MaaAssistantArknights/MaaAssistantArknights/issues/15963#issuecomment-4067281056)
 
+## 支持的 Agent
+
+| Agent | 认证方式 |
+|-------|---------|
+| `codex` | OpenAI API Key（需支持 Responses API，不是 Chat Completions） |
+| `claude` | Anthropic API Key |
+| `copilot` | GitHub PAT（需 Copilot Pro，在 [PAT 设置](https://github.com/settings/personal-access-tokens) 勾选 Copilot 权限） |
+
 ## 快速接入
 
-1. 请确保你有 Copilot Pro (当前仅支持 Copilot，以后可能适配 codex 等更多工具，欢迎 ISSUE 催更~)
-2. 前往 [GitHub PAT](https://github.com/settings/personal-access-tokens) 新增一个 token  
+1. 获取对应 agent 的 API Key / Token
 
-    - Expiration (过期时间): 设为一年以内（太长反而会报错）
-    - Add Premissions (添加权限): 勾上所有 Copilot 相关的
-    - 点最下面绿色的 Generate，得到一个 token，复制下来保存好
+    - **Codex**: 在 [OpenAI Platform](https://platform.openai.com/) 获取 API Key（需支持 Responses API）
+    - **Claude**: 在 [Anthropic Console](https://console.anthropic.com/) 获取 API Key
+    - **Copilot**: 前往 [GitHub PAT](https://github.com/settings/personal-access-tokens) 新增 token，勾选所有 Copilot 权限，过期时间设为一年以内
 
-3. 在你的 GitHub 仓库 - Settings - secrets - actions - new repository secret
+2. 在仓库 Settings → Secrets → Actions 添加 secret
 
-     - Name: `COPILOT_GITHUB_TOKEN`
-     - Secret: 上一步中生成的那个
+    - Name: `API_KEY`
+    - Secret: 上一步获取的 key/token
 
-5. 把下面两个文件拷贝到你的仓库里，文件夹不要变
+3. 把下面两个文件拷贝到你的仓库里
 
     - [`.github/workflows/ai-issue-analysis.yml`](.github/workflows/ai-issue-analysis.yml)
-    - [`.claude/skills/generic-issue-log-analysis/SKILL.md`](.claude/skills/generic-issue-log-analysis/SKILL.md)
+    - [`.claude/skills/generic-issue-log-analysis/SKILL.md`](.claude/skills/generic-issue-log-analysis/SKILL.md)（推荐，提升分析质量）
 
-6. 新提个 issue 测试下能否正常运行了，或者在以前的 issue 里 `@github-actions`
+4. 修改 workflow 中的 `agent` 和 `model` 参数
+
+5. 新提个 issue 测试下能否正常运行，或者在已有 issue 里 `@github-actions`
 
 > [!TIP]
 >
-> 如果你的项目有固定的日志包命名、关键日志路径、附件目录、模块映射或上游依赖，建议在这个通用版基础上微调 `SKILL.md`，分析质量会更高。最佳实践参考：
+> 如果你的项目有固定的日志包命名、关键日志路径、附件目录、模块映射或上游依赖，建议在通用版 `SKILL.md` 基础上微调，分析质量会更高。最佳实践参考：
 > - [MaaEnd](https://github.com/MaaEnd/MaaEnd/blob/v2/.claude/skills/maaend-issue-log-analysis/SKILL.md)
 > - [MaaAssistantArknights](https://github.com/MaaAssistantArknights/MaaAssistantArknights/blob/dev-v2/.claude/skills/maa-issue-log-analysis/SKILL.md)
 
+## Workflow 示例
+
+### Codex
+
+```yaml
+- uses: MistEO/ai-issue-analysis@main
+  with:
+    agent: codex
+    api-key: ${{ secrets.API_KEY }}
+    model: gpt-5.5
+    # api-base-url: https://your-proxy.example.com  # 可选，需支持 Responses API
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    bot-name: "@github-actions"
+```
+
+### Claude
+
+```yaml
+- uses: MistEO/ai-issue-analysis@main
+  with:
+    agent: claude
+    api-key: ${{ secrets.API_KEY }}
+    model: claude-sonnet-4.6
+    # api-base-url: https://your-proxy.example.com  # 可选
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    bot-name: "@github-actions"
+```
+
+### Copilot
+
+```yaml
+- uses: MistEO/ai-issue-analysis@main
+  with:
+    agent: copilot
+    api-key: ${{ secrets.API_KEY }}
+    model: gpt-5.4
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    bot-name: "@github-actions"
+    agent-extra-args: "--reasoning-effort xhigh"
+```
+
+### 多 Key 轮换
+
+`api-key` 支持传入多个 key（每行一个），action 会随机选择一个使用：
+
+```yaml
+api-key: |
+  ${{ secrets.API_KEY_1 }}
+  ${{ secrets.API_KEY_2 }}
+  ${{ secrets.API_KEY_3 }}
+```
+
 ## 输入说明
 
-- `issue-number`: Issue 编号，通常可以不传：
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `agent` | ✅ | — | AI agent：`copilot` / `claude` / `codex` |
+| `api-key` | ✅ | — | Agent 认证密钥，支持多个（每行一个，随机选取） |
+| `github-token` | ✅ | — | 用于创建和更新 Issue 评论 |
+| `api-base-url` | | `""` | 自定义 API 端点（copilot 忽略此项） |
+| `model` | | `""` | 模型名 |
+| `agent-package` | | `""` | 自定义 npm 包名，留空使用 agent 默认值 |
+| `agent-extra-args` | | `""` | 额外 CLI 参数（如 Copilot 的 `--reasoning-effort xhigh`） |
+| `issue-number` | | `""` | Issue 编号，通常自动推断 |
+| `bot-name` | | `""` | 从评论正文中剥离的 bot mention |
+| `initial-comment-body` | | 见 action.yml | 开始分析时的评论正文 |
+| `action-link-text` | | `GitHub Action 运行记录` | 评论中的运行链接文字 |
+| `details-summary` | | `点击此处展开分析过程` | 折叠块标题 |
+| `prompt-template` | | 见 action.yml | 基础提示词模板 |
+| `comment-prompt-template` | | 见 action.yml | 评论补充要求模板 |
+| `stream-update-interval-seconds` | | `30` | 流式更新间隔（秒） |
+| `answer-file` | | `answer.md` | Agent 写入最终结论的文件路径 |
+| `checkout-repository` | | `true` | 是否自动 checkout |
+| `process-error-message` | | 见 action.yml | 分析过程错误的回退消息 |
+| `result-error-message` | | 见 action.yml | 结论缺失时的回退消息 |
+| `extra-comment-content` | | `""` | 追加到每次评论末尾的额外内容 |
 
-    - `issues` / `issue_comment` 事件会自动读取 `github.event.issue.number`
-    - `workflow_dispatch` 会自动读取输入名为 `issue_number` 的 dispatch 参数
-    
-    如果你的 workflow_dispatch 输入名不是 `issue_number`，或者你在其他事件里调用这个 action，就显式传 `issue-number`。
+### 模板变量
 
-- `github-token`: 用于创建和更新 Issue 评论
-- `copilot-github-token`: Copilot CLI 使用的 Fine-grained token，支持传多个 token，每行一个，action 会随机选择一个使用
-- `bot-name`: 从 `issue_comment` 正文中剥离掉的 bot mention，比如 `@YourBot`
-- `initial-comment-body`: 开始分析时先发出的评论正文
-- `action-link-text`: 评论里展示的运行链接文字
-- `details-summary`: 分析过程折叠块的标题
-- `prompt-template`: 基础分析提示词模板
-- `comment-prompt-template`: 有评论补充要求时追加的提示词模板
-- `copilot-model`: 默认 `gpt-5.4`
-- `copilot-reasoning-effort`: 默认 `xhigh`
-- `stream-update-interval-seconds`: 流式更新评论的间隔秒数，默认 `30`
-- `checkout-repository`: 是否在 action 内部自动执行 `actions/checkout`，默认 `true`
-- `extra-comment-content`: 始终追加在每次评论最末尾的额外内容，默认为空
+- `{{issue_number}}` — Issue 编号
+- `{{answer_file}}` — 结论文件路径
+- `{{comment_body}}` — 触发评论的正文（去除 bot mention 后）
+- `{{repository}}` — 仓库全名（owner/repo）
+- `{{event_name}}` — 触发事件名
 
 ## 输出说明
 
-- `issue-number`: 本次运行实际解析出的 Issue 编号
-- `comment-id`: 创建并持续更新的评论 ID
-- `comment-url`: 创建并持续更新的评论 URL
-- `analysis-prompt`: 本次最终传给 Copilot 的 prompt
-- `copilot-output`: 完整执行日志，包含 Copilot 启动前的参数打印、prompt 正文，以及 Copilot CLI 输出
-- `final-conclusion`: Copilot 写入 `copilot-answer-file` 的最终结论
-- `analysis-prompt`、`copilot-output` 和 `final-conclusion` 在过长时会为适配 GitHub Actions output 大小限制而被截断；完整内容优先从 artifacts 读取
+| 输出 | 说明 |
+|------|------|
+| `issue-number` | 实际解析出的 Issue 编号 |
+| `comment-id` | 创建并持续更新的评论 ID |
+| `comment-url` | 评论 URL |
+| `analysis-prompt` | 最终传给 agent 的 prompt |
+| `agent-output` | 完整执行日志（含启动参数、prompt、agent 输出） |
+| `final-conclusion` | Agent 写入的最终结论 |
+
+> `analysis-prompt`、`agent-output`、`final-conclusion` 过长时会截断；完整内容从 artifacts 获取。
 
 ## 上传产物
 
-- `copilot-output-issue-<issue-number>-comment-<comment-id>`: 完整执行日志，包含启动前参数、prompt 正文和 Copilot CLI 输出
-- `final-conclusion-issue-<issue-number>-comment-<comment-id>`: 最终结论文本
+- `agent-output-issue-<N>-comment-<ID>` — 完整执行日志
+- `final-conclusion-issue-<N>-comment-<ID>` — 最终结论
 
 ## Skill 配合
 
-- 这个 action 只负责 GitHub Actions 编排、评论更新、Copilot CLI 调用和 prompt 拼接，不内置项目领域知识
-- 对需要分析 issue 附件、日志包、运行时配置、跨仓库代码路径的项目，建议配套提供项目自己的 issue 分析 skill
-- 一个可行的 skill 一般至少会覆盖这些步骤：读取 issue 正文和评论、定位并下载日志附件、先建立时间线再筛证据、最后回溯到代码和文档做归因
-- 如果没有这层 skill，action 仍然能运行，但对日志包、截图、跨模块调用链这类问题，分析质量通常会明显下降
-- 最佳实践参考，MaaEnd: `https://github.com/MaaEnd/MaaEnd/blob/v2/.claude/skills/maaend-issue-log-analysis/SKILL.md`
-- 最佳实践参考，MaaAssistantArknights: `https://github.com/MaaAssistantArknights/MaaAssistantArknights/blob/dev-v2/.claude/skills/maa-issue-log-analysis/SKILL.md`
+- action 负责 GitHub Actions 编排、评论更新、agent CLI 调用和 prompt 拼接，不内置项目领域知识
+- 建议配套 `.claude/skills/` 下的 issue 分析 skill（通用版已包含在本仓库）
+- Skill 一般覆盖：读取 issue 正文和评论 → 定位并下载日志附件 → 建立时间线 → 回溯代码和文档做归因
+- 最佳实践参考：[MaaEnd](https://github.com/MaaEnd/MaaEnd/blob/v2/.claude/skills/maaend-issue-log-analysis/SKILL.md)、[MaaAssistantArknights](https://github.com/MaaAssistantArknights/MaaAssistantArknights/blob/dev-v2/.claude/skills/maa-issue-log-analysis/SKILL.md)
 
-## 模板变量：
+## 行为说明
 
-- `{{issue_number}}`
-- `{{copilot_answer_file}}`
-- `{{comment_body}}`
-- `{{repository}}`
-- `{{event_name}}`
-
-## 行为说明：
-
-- action 内部会自动 `checkout` 调用方仓库
-- 如果调用方已经自己 checkout，或者前置步骤会生成工作区文件，可以把 `checkout-repository` 设为 `false`
-- 会自动安装 `@github/copilot`
-- 会先创建一条评论，然后持续更新这条评论
-- 会导出 `comment-id`、`comment-url`、`analysis-prompt`、`copilot-output`、`final-conclusion` 等 action outputs
-- `copilot-output` 会包含 Copilot 启动前的参数打印和 prompt 正文，不再只是 Copilot 进程本身的 stdout/stderr
-- 会上传 Copilot 原始输出和最终结论两个 artifacts
-- 最终评论会包含最终结论、完整分析过程折叠块，以及当前 Actions 运行链接
-- `copilot-github-token` 兼容单个 token，也兼容多个 token 按行填写；传多个时每次运行会随机选一个
-
+- action 内部自动 checkout 调用方仓库（可通过 `checkout-repository: false` 关闭）
+- 自动安装对应 agent 的 CLI
+- Claude 和 Codex 会自动处理 `.claude` / `.codex` skill 目录的互联（symlink）
+- 先创建一条评论，然后在分析过程中持续流式更新
+- 最终评论包含结论 + 完整分析过程折叠块 + Actions 运行链接
+- 上传 agent 输出和最终结论两个 artifacts

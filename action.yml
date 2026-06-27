@@ -1,105 +1,112 @@
 name: AI Issue Analysis
-description: Analyze a GitHub issue with Copilot CLI and keep a comment updated with progress and the final result.
+description: Analyze a GitHub issue with an AI coding agent (Copilot / Claude / Codex) and keep a comment updated with progress and the final result.
 author: MistEO
 
 inputs:
+  agent:
+    description: AI agent to use. One of copilot, claude, codex.
+    required: true
+  api-key:
+    description: API key or token for the agent. Supports multiple keys (one per line); a random one is picked each run.
+    required: true
+  api-base-url:
+    description: Custom API base URL. Leave empty to use the provider default. Ignored by copilot.
+    required: false
+    default: ""
+  model:
+    description: Model name passed to the agent CLI.
+    required: false
+    default: ""
+  agent-package:
+    description: NPM package to install. Leave empty to use the agent default.
+    required: false
+    default: ""
+  agent-extra-args:
+    description: Extra CLI arguments appended to the agent command (e.g. "--reasoning-effort xhigh" for Copilot).
+    required: false
+    default: ""
   issue-number:
-    description: Issue number to analyze. If empty, the action infers it from the current event or a workflow_dispatch input named issue_number.
+    description: Issue number to analyze. If empty, inferred from the event payload.
     required: false
     default: ""
   github-token:
     description: GitHub token used to create and update issue comments.
     required: true
-  copilot-github-token:
-    description: Fine-grained GitHub token with Copilot access for the Copilot CLI. Supports multiple tokens, one per line, and randomly picks one.
-    required: true
   bot-name:
-    description: Bot mention to strip from issue_comment messages before appending extra requirements.
+    description: Bot mention to strip from issue_comment messages.
     required: false
     default: ""
   initial-comment-body:
-    description: Initial comment body shown before the analysis finishes.
+    description: Initial comment body shown before analysis finishes.
     required: false
     default: |
       🤖 **AI 正在分析该 Issue...**  
       
       感谢您的反馈！AI 正在自动分析该问题，预计耗时约 10 分钟。
   action-link-text:
-    description: Link text shown for the current GitHub Actions run.
+    description: Link text for the current GitHub Actions run.
     required: false
     default: GitHub Action 运行记录
   details-summary:
-    description: Summary text used in the HTML details block that wraps the streaming output.
+    description: Summary text for the collapsible streaming output block.
     required: false
     default: 点击此处展开分析过程
   prompt-template:
-    description: Base prompt template. Supported placeholders are {{issue_number}}, {{copilot_answer_file}}, {{repository}}, and {{event_name}}.
+    description: "Base prompt template. Placeholders: {{issue_number}}, {{answer_file}}, {{repository}}, {{event_name}}."
     required: false
-    default: 分析 GitHub Issue {{issue_number}}。把最终结论写到 {{copilot_answer_file}}。
+    default: 分析 GitHub Issue {{issue_number}}。把最终结论写到 {{answer_file}}。
   comment-prompt-template:
-    description: Extra prompt appended when the triggering issue comment still has content after removing the bot mention. Supported placeholders also include {{comment_body}}.
+    description: "Extra prompt appended when the comment has content. Additional placeholder: {{comment_body}}."
     required: false
     default: 补充要求：{{comment_body}}
-  copilot-model:
-    description: Copilot CLI model name.
-    required: false
-    default: gpt-5.4
-  copilot-reasoning-effort:
-    description: Copilot CLI reasoning effort.
-    required: false
-    default: xhigh
   stream-update-interval-seconds:
-    description: Number of seconds between streamed comment updates.
+    description: Seconds between streamed comment updates.
     required: false
     default: "30"
   cache-dir:
-    description: Directory used for temporary prompt, output, and comment files.
+    description: Directory for temporary files.
     required: false
     default: .cache
-  copilot-answer-file:
-    description: File path where the prompt asks Copilot to write the final answer.
+  answer-file:
+    description: File path where the agent writes the final answer.
     required: false
-    default: copilot_answer.md
-  copilot-package:
-    description: NPM package to install for the Copilot CLI.
-    required: false
-    default: "@github/copilot"
+    default: answer.md
   checkout-repository:
-    description: Whether to run actions/checkout inside the action before analysis.
+    description: Whether to run actions/checkout inside the action.
     required: false
     default: "true"
   process-error-message:
-    description: Fallback message shown in the full analysis log when the Copilot answer file is not found.
+    description: Fallback message in the analysis log when the answer file is missing.
     required: false
     default: 分析过程出现错误，请重试。
   result-error-message:
-    description: Fallback message written into the final issue comment when the Copilot answer file is not found.
+    description: Fallback message in the final comment when the answer file is missing.
     required: false
     default: 分析结果出现错误，请重试。
   extra-comment-content:
-    description: Extra content always appended at the bottom of every comment update. Empty by default.
+    description: Extra content appended to every comment update.
     required: false
     default: ""
 
 outputs:
   issue-number:
-    description: Resolved issue number used for the run.
-    value: ${{ steps.issue_number.outputs.issue_number }}
+    description: Resolved issue number.
+    value: ${{ steps.prepare.outputs.issue_number }}
   comment-id:
-    description: The issue comment ID that was created and then updated.
+    description: Issue comment ID.
     value: ${{ steps.initial_comment.outputs.comment-id }}
   comment-url:
-    description: The URL of the issue comment that was created and then updated.
-    value: ${{ steps.export_results.outputs.comment-url }}
+    description: Issue comment URL.
+    value: ${{ steps.finalize.outputs.comment-url }}
   analysis-prompt:
-    description: Final rendered prompt passed to Copilot for this run.
-    value: ${{ steps.export_results.outputs.analysis-prompt }}
-  copilot-output:
-    description: Execution log including pre-run parameters, prompt, and Copilot stdout and stderr.
-    value: ${{ steps.export_results.outputs.copilot-output }}
+    description: Final prompt sent to the agent.
+    value: ${{ steps.finalize.outputs.analysis-prompt }}
+  agent-output:
+    description: Full execution log.
+    value: ${{ steps.finalize.outputs.agent-output }}
   final-conclusion:
-    description: Final conclusion content produced by Copilot.
-    value: ${{ steps.export_results.outputs.final-conclusion }}
+    description: Final conclusion from the agent.
+    value: ${{ steps.finalize.outputs.final-conclusion }}
 
 runs:
   using: composite
@@ -108,446 +115,106 @@ runs:
       if: ${{ inputs.checkout-repository == 'true' }}
       uses: actions/checkout@v4
 
-    - name: Determine issue number
-      id: issue_number
+    - name: Prepare (issue number, prompt, runtime paths)
+      id: prepare
       shell: bash
       env:
         INPUT_ISSUE_NUMBER: ${{ inputs.issue-number }}
         EVENT_NAME: ${{ github.event_name }}
-      run: |
-        python <<'PY'
-        import json
-        import os
-        from pathlib import Path
-
-        event_name = os.environ["EVENT_NAME"]
-        issue_number = os.environ["INPUT_ISSUE_NUMBER"].strip()
-        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-
-        if not issue_number:
-            if event_name in {"issues", "issue_comment"}:
-                issue_number = str(event["issue"]["number"])
-            elif event_name == "workflow_dispatch":
-                issue_number = str(event.get("inputs", {}).get("issue_number", "")).strip()
-
-        if not issue_number:
-            raise SystemExit("Unable to determine issue number. Pass input issue-number or expose workflow_dispatch input issue_number.")
-
-        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            fh.write(f"issue_number={issue_number}\n")
-        PY
-
-    - name: Prepare runtime files
-      id: runtime
-      shell: bash
-      env:
-        CACHE_DIR: ${{ inputs.cache-dir }}
-        DETAILS_SUMMARY: ${{ inputs.details-summary }}
-        ACTION_LINK_TEXT: ${{ inputs.action-link-text }}
-      run: |
-        mkdir -p "$CACHE_DIR"
-
-        {
-          echo "analysis_prompt_file=$CACHE_DIR/analysis_prompt.txt"
-          echo "copilot_output_file=$CACHE_DIR/copilot_output.log"
-          echo "copilot_execution_log_file=$CACHE_DIR/copilot_execution.log"
-          echo "copilot_output_artifact_file=$CACHE_DIR/copilot_output.txt"
-          echo "comment_body_file=$CACHE_DIR/comment_body.txt"
-          echo "final_comment_file=$CACHE_DIR/final_comment.md"
-          echo "final_conclusion_artifact_file=$CACHE_DIR/final_conclusion.md"
-          echo "details_end=</details>"
-          echo "action_link<<EOF"
-          echo "🔗 [$ACTION_LINK_TEXT](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          echo "EOF"
-          echo "details_begin<<EOF"
-          echo "<details><summary>$DETAILS_SUMMARY</summary>"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
-    - name: Build analysis prompt
-      shell: bash
-      env:
-        EVENT_NAME: ${{ github.event_name }}
-        ISSUE_NUMBER: ${{ steps.issue_number.outputs.issue_number }}
         BOT_NAME: ${{ inputs.bot-name }}
-        ANALYSIS_PROMPT_FILE: ${{ steps.runtime.outputs.analysis_prompt_file }}
-        COPILOT_ANSWER_FILE: ${{ inputs.copilot-answer-file }}
+        ANSWER_FILE: ${{ inputs.answer-file }}
         PROMPT_TEMPLATE: ${{ inputs.prompt-template }}
         COMMENT_PROMPT_TEMPLATE: ${{ inputs.comment-prompt-template }}
         REPOSITORY: ${{ github.repository }}
-      run: |
-        python <<'PY'
-        import json
-        import os
-        import re
-        from pathlib import Path
-
-        event_name = os.environ["EVENT_NAME"]
-        issue_number = os.environ["ISSUE_NUMBER"]
-        bot_name = os.environ["BOT_NAME"]
-        analysis_prompt_file = Path(os.environ["ANALYSIS_PROMPT_FILE"])
-        copilot_answer_file = os.environ["COPILOT_ANSWER_FILE"]
-        prompt_template = os.environ["PROMPT_TEMPLATE"]
-        comment_prompt_template = os.environ["COMMENT_PROMPT_TEMPLATE"]
-        repository = os.environ["REPOSITORY"]
-        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-
-        raw_comment = ""
-        if event_name == "issue_comment":
-            raw_comment = event.get("comment", {}).get("body", "")
-
-        cleaned_comment = raw_comment
-        if bot_name:
-            cleaned_comment = re.sub(rf"{re.escape(bot_name)}\b", "", cleaned_comment, flags=re.IGNORECASE)
-        cleaned_comment = re.sub(r"^[\s,，.。!！?？:：]+", "", cleaned_comment).strip()
-
-        def render(template: str) -> str:
-            return (
-                template
-                .replace("{{issue_number}}", issue_number)
-                .replace("{{copilot_answer_file}}", copilot_answer_file)
-                .replace("{{comment_body}}", cleaned_comment)
-                .replace("{{repository}}", repository)
-                .replace("{{event_name}}", event_name)
-            )
-
-        prompt = render(prompt_template).strip()
-        extra_prompt = render(comment_prompt_template).strip() if cleaned_comment else ""
-
-        if extra_prompt:
-            prompt = f"{prompt}\n\n{extra_prompt}" if prompt else extra_prompt
-
-        analysis_prompt_file.write_text(f"{prompt}\n", encoding="utf-8")
-        PY
+        CACHE_DIR: ${{ inputs.cache-dir }}
+        DETAILS_SUMMARY: ${{ inputs.details-summary }}
+        ACTION_LINK_TEXT: ${{ inputs.action-link-text }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+      run: python "${{ github.action_path }}/scripts/prepare.py"
 
     - name: Create initial comment
       id: initial_comment
       uses: peter-evans/create-or-update-comment@v4
       with:
-        issue-number: ${{ steps.issue_number.outputs.issue_number }}
+        issue-number: ${{ steps.prepare.outputs.issue_number }}
         token: ${{ inputs.github-token }}
         body: |
           ${{ inputs.initial-comment-body }}
           ---
-          ${{ steps.runtime.outputs.action_link }}
+          ${{ steps.prepare.outputs.action_link }}
 
-    - name: Install Copilot CLI
-      shell: bash
-      run: npm install -g "${{ inputs.copilot-package }}"
-
-    - name: Resolve Copilot token
-      id: resolve_copilot_token
+    - name: Run agent analysis with streaming updates
       shell: bash
       env:
-        INPUT_COPILOT_GITHUB_TOKEN: ${{ inputs.copilot-github-token }}
-      run: |
-        python <<'PY'
-        import os
-        import secrets
-
-        raw_value = os.environ["INPUT_COPILOT_GITHUB_TOKEN"]
-        tokens = [line.strip() for line in raw_value.splitlines() if line.strip()]
-
-        if not tokens:
-            raise SystemExit("Input copilot-github-token is empty after trimming blank lines.")
-
-        selected_token = secrets.choice(tokens)
-
-        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            fh.write(f"copilot_token={selected_token}\n")
-            fh.write(f"copilot_token_count={len(tokens)}\n")
-        PY
-
-    - name: Run Copilot analysis with streaming updates
-      shell: bash
-      env:
-        COPILOT_GITHUB_TOKEN: ${{ steps.resolve_copilot_token.outputs.copilot_token }}
+        AGENT_NAME: ${{ inputs.agent }}
+        API_KEY: ${{ inputs.api-key }}
+        API_BASE_URL: ${{ inputs.api-base-url }}
+        MODEL: ${{ inputs.model }}
+        AGENT_PACKAGE: ${{ inputs.agent-package }}
+        AGENT_EXTRA_ARGS: ${{ inputs.agent-extra-args }}
         COMMENT_GITHUB_TOKEN: ${{ inputs.github-token }}
-        GITHUB_SERVER_URL: ${{ github.server_url }}
-        COMMENT_ID: ${{ steps.initial_comment.outputs.comment-id }}
-        ISSUE_NUMBER: ${{ steps.issue_number.outputs.issue_number }}
         REPO: ${{ github.repository }}
-        ANALYSIS_PROMPT_FILE: ${{ steps.runtime.outputs.analysis_prompt_file }}
-        OUTPUT_FILE: ${{ steps.runtime.outputs.copilot_output_file }}
-        EXECUTION_LOG_FILE: ${{ steps.runtime.outputs.copilot_execution_log_file }}
-        BODY_FILE: ${{ steps.runtime.outputs.comment_body_file }}
+        COMMENT_ID: ${{ steps.initial_comment.outputs.comment-id }}
+        ISSUE_NUMBER: ${{ steps.prepare.outputs.issue_number }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+        ANALYSIS_PROMPT_FILE: ${{ steps.prepare.outputs.analysis_prompt_file }}
+        OUTPUT_FILE: ${{ steps.prepare.outputs.agent_output_file }}
+        EXECUTION_LOG_FILE: ${{ steps.prepare.outputs.agent_execution_log_file }}
+        BODY_FILE: ${{ steps.prepare.outputs.comment_body_file }}
         INITIAL_BODY: ${{ inputs.initial-comment-body }}
-        ACTION_LINK: ${{ steps.runtime.outputs.action_link }}
-        DETAILS_BEGIN: ${{ steps.runtime.outputs.details_begin }}
-        DETAILS_END: ${{ steps.runtime.outputs.details_end }}
-        COPILOT_MODEL: ${{ inputs.copilot-model }}
-        COPILOT_REASONING_EFFORT: ${{ inputs.copilot-reasoning-effort }}
+        ACTION_LINK: ${{ steps.prepare.outputs.action_link }}
+        DETAILS_BEGIN: ${{ steps.prepare.outputs.details_begin }}
+        DETAILS_END: ${{ steps.prepare.outputs.details_end }}
         STREAM_UPDATE_INTERVAL: ${{ inputs.stream-update-interval-seconds }}
         EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
-      run: |
-        COMMENT_URL="$GITHUB_SERVER_URL/$REPO/issues/$ISSUE_NUMBER#issuecomment-$COMMENT_ID"
+      run: python "${{ github.action_path }}/scripts/run_agent.py"
 
-        : > "$OUTPUT_FILE"
-        : > "$EXECUTION_LOG_FILE"
-        {
-          echo "Copilot invocation parameters:"
-          echo "  repo: $REPO"
-          echo "  issue-number: $ISSUE_NUMBER"
-          echo "  comment-id: $COMMENT_ID"
-          echo "  comment-url: $COMMENT_URL"
-          echo "  model: $COPILOT_MODEL"
-          echo "  reasoning-effort: $COPILOT_REASONING_EFFORT"
-          echo "  copilot-token-count: ${{ steps.resolve_copilot_token.outputs.copilot_token_count }}"
-          echo "  stream-update-interval-seconds: $STREAM_UPDATE_INTERVAL"
-          echo "  analysis-prompt-file: $ANALYSIS_PROMPT_FILE"
-          echo "  output-file: $OUTPUT_FILE"
-          echo "  body-file: $BODY_FILE"
-          echo "  command: copilot --yolo --model \"$COPILOT_MODEL\" --reasoning-effort \"$COPILOT_REASONING_EFFORT\" --prompt \"<contents of $ANALYSIS_PROMPT_FILE>\""
-          echo "Prompt content begins"
-          cat "$ANALYSIS_PROMPT_FILE"
-          echo "Prompt content ends"
-        } | tee -a "$EXECUTION_LOG_FILE"
-
-        copilot --yolo --model "$COPILOT_MODEL" --reasoning-effort "$COPILOT_REASONING_EFFORT" \
-          --prompt "$(cat "$ANALYSIS_PROMPT_FILE")" > "$OUTPUT_FILE" 2>&1 &
-        COPILOT_PID=$!
-        echo "Copilot started with PID $COPILOT_PID" | tee -a "$EXECUTION_LOG_FILE"
-
-        last_content=""
-
-        while true; do
-          sleep "$STREAM_UPDATE_INTERVAL" &
-          sleep_pid=$!
-
-          wait -n "$COPILOT_PID" "$sleep_pid" 2>/dev/null || true
-
-          if ! kill -0 "$COPILOT_PID" 2>/dev/null; then
-            kill "$sleep_pid" 2>/dev/null || true
-            break
-          fi
-
-          if [ -f "$OUTPUT_FILE" ]; then
-            current_content=$(cat "$OUTPUT_FILE")
-            if [ "$current_content" != "$last_content" ] && [ -n "$current_content" ]; then
-              {
-                echo "$INITIAL_BODY"
-                echo
-                echo "---"
-                echo
-                echo "$DETAILS_BEGIN"
-                echo
-                echo '```text'
-                echo "$current_content"
-                echo '```'
-                echo
-                echo "$DETAILS_END"
-                echo
-                echo "$ACTION_LINK"
-                if [ -n "$EXTRA_COMMENT_CONTENT" ]; then
-                  echo
-                  echo "$EXTRA_COMMENT_CONTENT"
-                fi
-              } > "$BODY_FILE"
-
-              jq -n --arg body "$(cat "$BODY_FILE")" '{"body":$body}' | \
-                curl -s -L -X PATCH \
-                  -H "Authorization: token $COMMENT_GITHUB_TOKEN" \
-                  -H "Accept: application/vnd.github.v3+json" \
-                  "https://api.github.com/repos/$REPO/issues/comments/$COMMENT_ID" \
-                  -d @-
-
-              last_content="$current_content"
-              echo "Comment updated at $(date)"
-            fi
-          fi
-        done
-
-        wait "$COPILOT_PID"
-
-        {
-          echo
-          echo "Copilot output begins"
-          if [ -f "$OUTPUT_FILE" ]; then
-            cat "$OUTPUT_FILE"
-          fi
-          echo
-          echo "Copilot output ends"
-        } >> "$EXECUTION_LOG_FILE"
-
-    - name: Full analysis
-      if: ${{ always() }}
-      shell: bash
-      env:
-        COPILOT_OUTPUT_FILE: ${{ steps.runtime.outputs.copilot_execution_log_file }}
-        COPILOT_ANSWER_FILE: ${{ inputs.copilot-answer-file }}
-        PROCESS_ERROR_MESSAGE: ${{ inputs.process-error-message }}
-      run: |
-        if [ -f "$COPILOT_OUTPUT_FILE" ]; then
-          cat "$COPILOT_OUTPUT_FILE"
-        fi
-        echo
-        echo "---"
-        echo
-        if [ -f "$COPILOT_ANSWER_FILE" ]; then
-          cat "$COPILOT_ANSWER_FILE"
-        else
-          echo "$PROCESS_ERROR_MESSAGE"
-        fi
-
-    - name: Prepare final comment
-      if: ${{ always() }}
-      shell: bash
-      env:
-        COPILOT_ANSWER_FILE: ${{ inputs.copilot-answer-file }}
-        COPILOT_OUTPUT_FILE: ${{ steps.runtime.outputs.copilot_output_file }}
-        FINAL_COMMENT_FILE: ${{ steps.runtime.outputs.final_comment_file }}
-        ACTION_LINK: ${{ steps.runtime.outputs.action_link }}
-        DETAILS_BEGIN: ${{ steps.runtime.outputs.details_begin }}
-        DETAILS_END: ${{ steps.runtime.outputs.details_end }}
-        EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
-        RESULT_ERROR_MESSAGE: ${{ inputs.result-error-message }}
-      run: |
-        : > "$FINAL_COMMENT_FILE"
-
-        if [ -f "$COPILOT_ANSWER_FILE" ]; then
-          cat "$COPILOT_ANSWER_FILE" >> "$FINAL_COMMENT_FILE"
-        else
-          echo "$RESULT_ERROR_MESSAGE" >> "$FINAL_COMMENT_FILE"
-        fi
-
-        {
-          echo
-          echo "---"
-          echo
-          echo "$DETAILS_BEGIN"
-          echo
-          echo '```text'
-          if [ -f "$COPILOT_OUTPUT_FILE" ]; then
-            cat "$COPILOT_OUTPUT_FILE"
-          fi
-          echo '```'
-          echo
-          echo "$DETAILS_END"
-          echo
-          echo "$ACTION_LINK"
-          if [ -n "$EXTRA_COMMENT_CONTENT" ]; then
-            echo
-            echo "$EXTRA_COMMENT_CONTENT"
-          fi
-        } >> "$FINAL_COMMENT_FILE"
-
-    - name: Export action results
-      id: export_results
+    - name: Finalize (comment, artifacts, outputs)
+      id: finalize
       if: ${{ always() }}
       shell: bash
       env:
         COMMENT_ID: ${{ steps.initial_comment.outputs.comment-id }}
         GITHUB_SERVER_URL: ${{ github.server_url }}
-        ISSUE_NUMBER: ${{ steps.issue_number.outputs.issue_number }}
+        ISSUE_NUMBER: ${{ steps.prepare.outputs.issue_number }}
         REPOSITORY: ${{ github.repository }}
-        ANALYSIS_PROMPT_FILE: ${{ steps.runtime.outputs.analysis_prompt_file }}
-        COPILOT_OUTPUT_FILE: ${{ steps.runtime.outputs.copilot_execution_log_file }}
-        COPILOT_OUTPUT_ARTIFACT_FILE: ${{ steps.runtime.outputs.copilot_output_artifact_file }}
-        COPILOT_ANSWER_FILE: ${{ inputs.copilot-answer-file }}
-        FINAL_CONCLUSION_ARTIFACT_FILE: ${{ steps.runtime.outputs.final_conclusion_artifact_file }}
-      run: |
-        python <<'PY'
-        import os
-        import uuid
-        from pathlib import Path
+        ANALYSIS_PROMPT_FILE: ${{ steps.prepare.outputs.analysis_prompt_file }}
+        EXECUTION_LOG_FILE: ${{ steps.prepare.outputs.agent_execution_log_file }}
+        OUTPUT_ARTIFACT_FILE: ${{ steps.prepare.outputs.agent_output_artifact_file }}
+        OUTPUT_FILE: ${{ steps.prepare.outputs.agent_output_file }}
+        ANSWER_FILE: ${{ inputs.answer-file }}
+        CONCLUSION_ARTIFACT_FILE: ${{ steps.prepare.outputs.final_conclusion_artifact_file }}
+        FINAL_COMMENT_FILE: ${{ steps.prepare.outputs.final_comment_file }}
+        ACTION_LINK: ${{ steps.prepare.outputs.action_link }}
+        DETAILS_BEGIN: ${{ steps.prepare.outputs.details_begin }}
+        DETAILS_END: ${{ steps.prepare.outputs.details_end }}
+        EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
+        RESULT_ERROR_MESSAGE: ${{ inputs.result-error-message }}
+        PROCESS_ERROR_MESSAGE: ${{ inputs.process-error-message }}
+      run: python "${{ github.action_path }}/scripts/finalize.py"
 
-        github_output = Path(os.environ["GITHUB_OUTPUT"])
-        comment_id = os.environ["COMMENT_ID"]
-        github_server_url = os.environ["GITHUB_SERVER_URL"]
-        issue_number = os.environ["ISSUE_NUMBER"]
-        repository = os.environ["REPOSITORY"]
-        analysis_prompt_file = Path(os.environ["ANALYSIS_PROMPT_FILE"])
-        copilot_output_file = Path(os.environ["COPILOT_OUTPUT_FILE"])
-        copilot_output_artifact_file = Path(os.environ["COPILOT_OUTPUT_ARTIFACT_FILE"])
-        copilot_answer_file = Path(os.environ["COPILOT_ANSWER_FILE"])
-        final_conclusion_artifact_file = Path(os.environ["FINAL_CONCLUSION_ARTIFACT_FILE"])
-        comment_url = (
-            f"{github_server_url}/{repository}/issues/{issue_number}#issuecomment-{comment_id}"
-            if comment_id
-            else ""
-        )
-
-        def read_or_placeholder(path: Path, missing_message: str) -> str:
-            if path.is_file():
-                return path.read_text(encoding="utf-8")
-            return f"{missing_message}\n"
-
-        def truncate_for_output(value: str, label: str, max_bytes: int = 300000) -> str:
-            encoded = value.encode("utf-8")
-            if len(encoded) <= max_bytes:
-                return value
-
-            suffix = (
-                f"\n\n[Truncated {label} for GitHub Actions output size limits. "
-                "Use the uploaded artifact for the full content.]\n"
-            )
-            suffix_bytes = suffix.encode("utf-8")
-            trimmed = encoded[: max_bytes - len(suffix_bytes)].decode("utf-8", errors="ignore")
-            return f"{trimmed}{suffix}"
-
-        copilot_output = read_or_placeholder(
-            copilot_output_file,
-            f"Copilot output file not found: {copilot_output_file}",
-        )
-        final_conclusion = read_or_placeholder(
-            copilot_answer_file,
-            f"Copilot answer file not found: {copilot_answer_file}",
-        )
-        analysis_prompt = read_or_placeholder(
-            analysis_prompt_file,
-            f"Analysis prompt file not found: {analysis_prompt_file}",
-        )
-
-        copilot_output_artifact_file.write_text(copilot_output, encoding="utf-8")
-        final_conclusion_artifact_file.write_text(final_conclusion, encoding="utf-8")
-
-        def write_multiline_output(name: str, value: str) -> None:
-            delimiter = f"EOF_{uuid.uuid4().hex}"
-            normalized_value = value if value.endswith("\n") else f"{value}\n"
-            with github_output.open("a", encoding="utf-8") as fh:
-                fh.write(f"{name}<<{delimiter}\n")
-                fh.write(normalized_value)
-                fh.write(f"{delimiter}\n")
-
-        with github_output.open("a", encoding="utf-8") as fh:
-            fh.write(f"comment-id={comment_id}\n")
-            fh.write(f"comment-url={comment_url}\n")
-
-        write_multiline_output(
-            "analysis-prompt",
-            truncate_for_output(analysis_prompt, "analysis-prompt"),
-        )
-        write_multiline_output(
-            "copilot-output",
-            truncate_for_output(copilot_output, "copilot-output"),
-        )
-        write_multiline_output(
-            "final-conclusion",
-            truncate_for_output(final_conclusion, "final-conclusion"),
-        )
-        PY
-
-    - name: Upload Copilot output artifact
+    - name: Upload agent output artifact
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: copilot-output-issue-${{ steps.issue_number.outputs.issue_number }}-comment-${{ steps.initial_comment.outputs.comment-id || 'none' }}
-        path: ${{ steps.runtime.outputs.copilot_output_artifact_file }}
-        if-no-files-found: error
+        name: agent-output-issue-${{ steps.prepare.outputs.issue_number }}-comment-${{ steps.initial_comment.outputs.comment-id || 'none' }}
+        path: ${{ steps.prepare.outputs.agent_output_artifact_file }}
+        if-no-files-found: warn
 
     - name: Upload final conclusion artifact
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: final-conclusion-issue-${{ steps.issue_number.outputs.issue_number }}-comment-${{ steps.initial_comment.outputs.comment-id || 'none' }}
-        path: ${{ steps.runtime.outputs.final_conclusion_artifact_file }}
-        if-no-files-found: error
+        name: final-conclusion-issue-${{ steps.prepare.outputs.issue_number }}-comment-${{ steps.initial_comment.outputs.comment-id || 'none' }}
+        path: ${{ steps.prepare.outputs.final_conclusion_artifact_file }}
+        if-no-files-found: warn
 
-    - name: Update comment with analysis result
+    - name: Update comment with final result
       if: ${{ always() && steps.initial_comment.outputs.comment-id != '' }}
       uses: peter-evans/create-or-update-comment@v4
       with:
         comment-id: ${{ steps.initial_comment.outputs.comment-id }}
         edit-mode: replace
-        body-path: ${{ steps.runtime.outputs.final_comment_file }}
+        body-path: ${{ steps.prepare.outputs.final_comment_file }}
         token: ${{ inputs.github-token }}
