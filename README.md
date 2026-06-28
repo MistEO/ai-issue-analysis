@@ -1,6 +1,6 @@
 # ai-issue-analysis
 
-一个通用的 GitHub action，在 Issue 打开或被评论时调用 AI coding agent（Copilot / Claude / Codex）进行分析，并把分析过程和最终结论持续回写到同一条评论里。
+一个通用的 GitHub action，在 Issue 打开或被评论时自动调用 AI coding agent（Claude / Codex / Copilot）进行分析，并把分析过程和最终结论持续回写到同一条评论里。
 
 实战效果展示：
 
@@ -17,16 +17,16 @@
 
 ## 快速接入
 
-1. 获取对应 agent 的 API Key / Token
+1. 获取对应 agent 的 API Key / Base URL
 
-    - **Claude**: 在 [Anthropic Console](https://console.anthropic.com/) 获取 API Key
-    - **Codex**: 在 [OpenAI Platform](https://platform.openai.com/) 获取 API Key（需支持 Responses API）
+    - **Claude**: 通过您的 AI 提供商获取 API Key 和 API Base URL
+    - **Codex**: 通过您的 AI 提供商获取 API Key 和 API Base URL *（需支持 Responses API）*
     - **Copilot**: 前往 [GitHub PAT](https://github.com/settings/personal-access-tokens) 新增 token，勾选所有 Copilot 权限，过期时间设为一年以内
 
 2. 在仓库 Settings → Secrets → Actions 添加 secret
 
-    - `API_KEY`: 上一步获取的 key/token
-    - `API_BASE_URL`（可选）: 自定义 API 端点，使用第三方代理/中转时填写
+    - `API_KEY`: 上一步获取的 API Key
+    - `API_BASE_URL`: 上一步获取的 API Base URL *（Copilot 忽略该步骤）*
 
 3. 把下面两个文件拷贝到你的仓库里
 
