@@ -2,8 +2,6 @@
 
 一个通用的 GitHub action，在 Issue 打开或被评论时调用 AI coding agent（Copilot / Claude / Codex）进行分析，并把分析过程和最终结论持续回写到同一条评论里。
 
-通过 `agent` 参数一键切换后端，统一 `api-key`、`api-base-url`、`model` 等配置，无需维护多套 workflow。
-
 实战效果展示：
 
 - [Bot 自动分析回复 ISSUE: 加载时间过长导致拜访好友失败](https://github.com/MaaEnd/MaaEnd/issues/1361#issuecomment-4071450863)
@@ -33,7 +31,7 @@
 3. 把下面两个文件拷贝到你的仓库里
 
     - [`.github/workflows/ai-issue-analysis.yml`](.github/workflows/ai-issue-analysis.yml)
-    - [`.claude/skills/generic-issue-log-analysis/SKILL.md`](.claude/skills/generic-issue-log-analysis/SKILL.md)（推荐，提升分析质量）
+    - [`.claude/skills/generic-issue-log-analysis/SKILL.md`](.claude/skills/generic-issue-log-analysis/SKILL.md)（推荐根据项目实际情况修改调整，以提升分析质量）
 
 4. 修改 workflow 中的关键参数
 
