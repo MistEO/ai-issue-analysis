@@ -10,7 +10,7 @@ inputs:
     description: API key or token for the agent. Supports multiple keys (one per line); a random one is picked each run.
     required: true
   api-base-url:
-    description: Custom API base URL. Leave empty to use the provider default. Ignored by copilot.
+    description: Custom API base URL. Typically passed from a repository secret (e.g. secrets.API_BASE_URL).
     required: false
     default: ""
   model:

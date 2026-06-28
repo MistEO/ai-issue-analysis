@@ -33,10 +33,10 @@ jobs:
           # --- 选择 agent（三选一：copilot / claude / codex）---
           agent: copilot
 
-          # --- 统一认证 ---
+          # --- 统一认证 ---  
           api-key: ${{ secrets.API_KEY }}
-          model: gpt-5.4
-          # api-base-url: https://your-custom-endpoint.example.com  # 可选，使用自定义端点时填写
+          api-base-url: ${{ secrets.API_BASE_URL }}
+          model: glm-5.2
 
           # --- 通用配置 ---
           github-token: ${{ secrets.GITHUB_TOKEN }}

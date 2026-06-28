@@ -27,15 +27,18 @@
 
 2. 在仓库 Settings → Secrets → Actions 添加 secret
 
-    - Name: `API_KEY`
-    - Secret: 上一步获取的 key/token
+    - `API_KEY`: 上一步获取的 key/token
+    - `API_BASE_URL`（可选）: 自定义 API 端点，使用第三方代理/中转时填写
 
 3. 把下面两个文件拷贝到你的仓库里
 
     - [`.github/workflows/ai-issue-analysis.yml`](.github/workflows/ai-issue-analysis.yml)
     - [`.claude/skills/generic-issue-log-analysis/SKILL.md`](.claude/skills/generic-issue-log-analysis/SKILL.md)（推荐，提升分析质量）
 
-4. 修改 workflow 中的 `agent` 和 `model` 参数
+4. 修改 workflow 中的关键参数
+
+    - `agent`: 选择 `copilot` / `claude` / `codex`
+    - `model`: 填入要使用的模型名
 
 5. 新提个 issue 测试下能否正常运行，或者在已有 issue 里 `@github-actions`
 
@@ -54,8 +57,8 @@
   with:
     agent: codex
     api-key: ${{ secrets.API_KEY }}
+    api-base-url: ${{ secrets.API_BASE_URL }}
     model: gpt-5.5
-    # api-base-url: https://your-proxy.example.com  # 可选，需支持 Responses API
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
 ```
@@ -67,8 +70,8 @@
   with:
     agent: claude
     api-key: ${{ secrets.API_KEY }}
+    api-base-url: ${{ secrets.API_BASE_URL }}
     model: claude-sonnet-4.6
-    # api-base-url: https://your-proxy.example.com  # 可选
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
 ```
@@ -104,7 +107,7 @@ api-key: |
 | `agent` | ✅ | — | AI agent：`copilot` / `claude` / `codex` |
 | `api-key` | ✅ | — | Agent 认证密钥，支持多个（每行一个，随机选取） |
 | `github-token` | ✅ | — | 用于创建和更新 Issue 评论 |
-| `api-base-url` | | `""` | 自定义 API 端点（copilot 忽略此项） |
+| `api-base-url` | | `""` | 自定义 API 端点，建议通过 `secrets.API_BASE_URL` 传入 |
 | `model` | | `""` | 模型名 |
 | `agent-package` | | `""` | 自定义 npm 包名，留空使用 agent 默认值 |
 | `agent-extra-args` | | `""` | 额外 CLI 参数（如 Copilot 的 `--reasoning-effort xhigh`） |
