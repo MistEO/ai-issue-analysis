@@ -30,8 +30,8 @@ jobs:
         id: analysis
         uses: MistEO/ai-issue-analysis@main
         with:
-          # --- 选择 agent（三选一：copilot / claude / codex）---
-          agent: copilot
+          # --- 选择 agent（三选一：claude / codex / copilot）---
+          agent: claude
 
           # --- 统一认证 ---  
           api-key: ${{ secrets.API_KEY }}

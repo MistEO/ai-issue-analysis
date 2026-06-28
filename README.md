@@ -13,16 +13,16 @@
 
 | Agent | 认证方式 |
 |-------|---------|
-| `codex` | OpenAI API Key（需支持 Responses API，不是 Chat Completions） |
 | `claude` | Anthropic API Key |
+| `codex` | OpenAI API Key（需支持 Responses API，不是 Chat Completions） |
 | `copilot` | GitHub PAT（需 Copilot Pro，在 [PAT 设置](https://github.com/settings/personal-access-tokens) 勾选 Copilot 权限） |
 
 ## 快速接入
 
 1. 获取对应 agent 的 API Key / Token
 
-    - **Codex**: 在 [OpenAI Platform](https://platform.openai.com/) 获取 API Key（需支持 Responses API）
     - **Claude**: 在 [Anthropic Console](https://console.anthropic.com/) 获取 API Key
+    - **Codex**: 在 [OpenAI Platform](https://platform.openai.com/) 获取 API Key（需支持 Responses API）
     - **Copilot**: 前往 [GitHub PAT](https://github.com/settings/personal-access-tokens) 新增 token，勾选所有 Copilot 权限，过期时间设为一年以内
 
 2. 在仓库 Settings → Secrets → Actions 添加 secret
@@ -50,19 +50,6 @@
 
 ## Workflow 示例
 
-### Codex
-
-```yaml
-- uses: MistEO/ai-issue-analysis@main
-  with:
-    agent: codex
-    api-key: ${{ secrets.API_KEY }}
-    api-base-url: ${{ secrets.API_BASE_URL }}
-    model: gpt-5.5
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    bot-name: "@github-actions"
-```
-
 ### Claude
 
 ```yaml
@@ -72,6 +59,19 @@
     api-key: ${{ secrets.API_KEY }}
     api-base-url: ${{ secrets.API_BASE_URL }}
     model: claude-sonnet-4.6
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    bot-name: "@github-actions"
+```
+
+### Codex
+
+```yaml
+- uses: MistEO/ai-issue-analysis@main
+  with:
+    agent: codex
+    api-key: ${{ secrets.API_KEY }}
+    api-base-url: ${{ secrets.API_BASE_URL }}
+    model: gpt-5.5
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
 ```
