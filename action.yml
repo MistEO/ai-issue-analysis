@@ -54,7 +54,7 @@ inputs:
   prompt-template:
     description: "Base prompt template. Placeholders: {{issue_number}}, {{answer_file}}, {{repository}}, {{event_name}}."
     required: false
-    default: 分析 GitHub Issue {{issue_number}}。把最终结论写到 {{answer_file}}。
+    default: 严格按照 SKILL 中的规则，分析 GitHub Issue {{issue_number}}。把最终结论写到 {{answer_file}}。
   comment-prompt-template:
     description: "Extra prompt appended when the comment has content. Additional placeholder: {{comment_body}}."
     required: false
