@@ -42,7 +42,7 @@ class Copilot(Agent):
     name = "copilot"
     display_name = "Copilot"
     default_package = "@github/copilot"
-    default_model = "gpt-5.4"
+    default_model = "gpt-5.6-terra"
 
     def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
         return {"COPILOT_GITHUB_TOKEN": api_key}
@@ -59,8 +59,8 @@ class Copilot(Agent):
 class Claude(Agent):
     name = "claude"
     display_name = "Claude"
-    default_package = "@anthropic-ai/claude-code"
-    default_model = "claude-sonnet-4.6"
+    default_package = "@anthropic-ai/claude-code@2.1.225"
+    default_model = "claude-sonnet-5"
 
     def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
         env: dict[str, str] = {"ANTHROPIC_API_KEY": api_key}
@@ -91,7 +91,7 @@ class Codex(Agent):
     name = "codex"
     display_name = "Codex"
     default_package = "@openai/codex"
-    default_model = "gpt-5.5"
+    default_model = "gpt-5.6-terra"
 
     def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
         model = self.resolve_model(model)
