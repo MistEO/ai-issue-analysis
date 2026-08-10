@@ -59,7 +59,7 @@ class Copilot(Agent):
 class Claude(Agent):
     name = "claude"
     display_name = "Claude"
-    default_package = "@anthropic-ai/claude-code@2.1.225"
+    default_package = "@anthropic-ai/claude-code"
     default_model = "claude-sonnet-5"
 
     def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
