@@ -56,7 +56,7 @@
     agent: claude
     api-key: ${{ secrets.API_KEY }}
     api-base-url: ${{ secrets.API_BASE_URL }}
-    model: claude-sonnet-4.6
+    model: claude-sonnet-5
     reasoning-effort: xhigh
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
@@ -70,7 +70,7 @@
     agent: codex
     api-key: ${{ secrets.API_KEY }}
     api-base-url: ${{ secrets.API_BASE_URL }}
-    model: gpt-5.5
+    model: gpt-5.6-terra
     reasoning-effort: xhigh
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
