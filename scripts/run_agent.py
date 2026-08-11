@@ -71,6 +71,7 @@ def main() -> None:
     model = os.environ.get("MODEL", "").strip()
     package = os.environ.get("AGENT_PACKAGE", "").strip()
     extra_args_raw = os.environ.get("AGENT_EXTRA_ARGS", "").strip()
+    reasoning_effort = os.environ.get("REASONING_EFFORT", "").strip()
 
     github_token = os.environ["COMMENT_GITHUB_TOKEN"]
     repo = os.environ["REPO"]
@@ -97,11 +98,11 @@ def main() -> None:
     agent.setup_skill_links()
 
     model = agent.resolve_model(model)
-    agent_env = agent.configure(api_key, base_url, model)
+    agent_env = agent.configure(api_key, base_url, model, reasoning_effort)
 
     prompt = Path(prompt_file).read_text(encoding="utf-8").strip()
     extra_args = shlex.split(extra_args_raw) if extra_args_raw else []
-    cmd = agent.build_command(model, prompt, extra_args)
+    cmd = agent.build_command(model, prompt, extra_args, reasoning_effort)
 
     comment_url = (
         f"{server_url}/{repo}/issues/{issue_number}#issuecomment-{comment_id}"
@@ -116,6 +117,7 @@ def main() -> None:
         f"  comment-id: {comment_id}",
         f"  comment-url: {comment_url}",
         f"  model: {model}",
+        f"  reasoning-effort: {reasoning_effort or '(agent default)'}",
         f"  api-key-count: {key_count}",
         f"  stream-update-interval-seconds: {interval}",
         f"  analysis-prompt-file: {prompt_file}",

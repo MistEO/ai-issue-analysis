@@ -8,6 +8,13 @@ import sys
 from pathlib import Path
 
 
+# Copilot CLI currently documents low/medium/high/xhigh only.
+_COPILOT_EFFORT_MAP = {
+    "max": "xhigh",
+    "ultra": "xhigh",
+}
+
+
 class Agent:
     name: str
     display_name: str
@@ -26,11 +33,23 @@ class Agent:
     def resolve_model(self, model: str) -> str:
         return model or self.default_model
 
-    def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
+    def configure(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        reasoning_effort: str = "",
+    ) -> dict[str, str]:
         """Return env vars to inject into the agent process."""
         raise NotImplementedError
 
-    def build_command(self, model: str, prompt: str, extra_args: list[str]) -> list[str]:
+    def build_command(
+        self,
+        model: str,
+        prompt: str,
+        extra_args: list[str],
+        reasoning_effort: str = "",
+    ) -> list[str]:
         raise NotImplementedError
 
     def setup_skill_links(self) -> None:
@@ -44,16 +63,31 @@ class Copilot(Agent):
     default_package = "@github/copilot"
     default_model = "gpt-5.6-terra"
 
-    def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
+    def configure(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        reasoning_effort: str = "",
+    ) -> dict[str, str]:
         return {"COPILOT_GITHUB_TOKEN": api_key}
 
-    def build_command(self, model: str, prompt: str, extra_args: list[str]) -> list[str]:
-        return [
+    def build_command(
+        self,
+        model: str,
+        prompt: str,
+        extra_args: list[str],
+        reasoning_effort: str = "",
+    ) -> list[str]:
+        cmd = [
             "copilot", "--yolo",
             "--model", self.resolve_model(model),
-            *extra_args,
-            "--prompt", prompt,
         ]
+        if reasoning_effort:
+            effort = _COPILOT_EFFORT_MAP.get(reasoning_effort.lower(), reasoning_effort)
+            cmd += ["--reasoning-effort", effort]
+        cmd += [*extra_args, "--prompt", prompt]
+        return cmd
 
 
 class Claude(Agent):
@@ -62,20 +96,34 @@ class Claude(Agent):
     default_package = "@anthropic-ai/claude-code"
     default_model = "claude-sonnet-5"
 
-    def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
+    def configure(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        reasoning_effort: str = "",
+    ) -> dict[str, str]:
         env: dict[str, str] = {"ANTHROPIC_API_KEY": api_key}
         if base_url:
             env["ANTHROPIC_BASE_URL"] = base_url
         return env
 
-    def build_command(self, model: str, prompt: str, extra_args: list[str]) -> list[str]:
-        return [
+    def build_command(
+        self,
+        model: str,
+        prompt: str,
+        extra_args: list[str],
+        reasoning_effort: str = "",
+    ) -> list[str]:
+        cmd = [
             "claude", "-p",
             "--model", self.resolve_model(model),
             "--dangerously-skip-permissions",
-            *extra_args,
-            prompt,
         ]
+        if reasoning_effort:
+            cmd += ["--effort", reasoning_effort]
+        cmd += [*extra_args, prompt]
+        return cmd
 
     def setup_skill_links(self) -> None:
         if Path(".codex").is_dir() and not Path(".claude").exists():
@@ -93,13 +141,21 @@ class Codex(Agent):
     default_package = "@openai/codex"
     default_model = "gpt-5.6-terra"
 
-    def configure(self, api_key: str, base_url: str, model: str) -> dict[str, str]:
+    def configure(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        reasoning_effort: str = "",
+    ) -> dict[str, str]:
         model = self.resolve_model(model)
         codex_home = Path.home() / ".codex"
         codex_home.mkdir(parents=True, exist_ok=True)
         config_path = codex_home / "config.toml"
 
         lines = [f'model = "{model}"']
+        if reasoning_effort:
+            lines.append(f'model_reasoning_effort = "{reasoning_effort}"')
         if base_url:
             lines += [
                 'model_provider = "custom"',
@@ -121,7 +177,14 @@ class Codex(Agent):
 
         return {"CODEX_API_KEY": api_key}
 
-    def build_command(self, model: str, prompt: str, extra_args: list[str]) -> list[str]:
+    def build_command(
+        self,
+        model: str,
+        prompt: str,
+        extra_args: list[str],
+        reasoning_effort: str = "",
+    ) -> list[str]:
+        # reasoning_effort is applied via config.toml in configure().
         return [
             "codex", "exec",
             "--dangerously-bypass-approvals-and-sandbox",

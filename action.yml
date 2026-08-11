@@ -17,12 +17,21 @@ inputs:
     description: Model name passed to the agent CLI.
     required: false
     default: ""
+  reasoning-effort:
+    description: >-
+      Thinking / reasoning effort level. Default xhigh.
+      Claude: --effort (low/medium/high/xhigh/max).
+      Codex: model_reasoning_effort (low/medium/high/xhigh/max/ultra).
+      Copilot: --reasoning-effort (low/medium/high/xhigh; max/ultra map to xhigh).
+      Leave empty to skip and use the agent default.
+    required: false
+    default: "xhigh"
   agent-package:
     description: NPM package to install. Leave empty to use the agent default.
     required: false
     default: ""
   agent-extra-args:
-    description: Extra CLI arguments appended to the agent command (e.g. "--reasoning-effort xhigh" for Copilot).
+    description: Extra CLI arguments appended to the agent command.
     required: false
     default: ""
   issue-number:
@@ -151,6 +160,7 @@ runs:
         API_KEY: ${{ inputs.api-key }}
         API_BASE_URL: ${{ inputs.api-base-url }}
         MODEL: ${{ inputs.model }}
+        REASONING_EFFORT: ${{ inputs.reasoning-effort }}
         AGENT_PACKAGE: ${{ inputs.agent-package }}
         AGENT_EXTRA_ARGS: ${{ inputs.agent-extra-args }}
         COMMENT_GITHUB_TOKEN: ${{ inputs.github-token }}

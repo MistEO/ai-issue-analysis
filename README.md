@@ -57,6 +57,7 @@
     api-key: ${{ secrets.API_KEY }}
     api-base-url: ${{ secrets.API_BASE_URL }}
     model: claude-sonnet-4.6
+    reasoning-effort: xhigh
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
 ```
@@ -70,6 +71,7 @@
     api-key: ${{ secrets.API_KEY }}
     api-base-url: ${{ secrets.API_BASE_URL }}
     model: gpt-5.5
+    reasoning-effort: xhigh
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
 ```
@@ -82,9 +84,9 @@
     agent: copilot
     api-key: ${{ secrets.API_KEY }}
     model: gpt-5.4
+    reasoning-effort: xhigh
     github-token: ${{ secrets.GITHUB_TOKEN }}
     bot-name: "@github-actions"
-    agent-extra-args: "--reasoning-effort xhigh"
 ```
 
 ### 多 Key 轮换
@@ -108,7 +110,8 @@ api-key: |
 | `api-base-url` | | `""` | 自定义 API 端点，建议通过 `secrets.API_BASE_URL` 传入 |
 | `model` | | `""` | 模型名 |
 | `agent-package` | | `""` | 自定义 npm 包名，留空使用 agent 默认值 |
-| `agent-extra-args` | | `""` | 额外 CLI 参数（如 Copilot 的 `--reasoning-effort xhigh`） |
+| `reasoning-effort` | | `xhigh` | 思考/推理等级。Claude: low/medium/high/xhigh/max；Codex: low/medium/high/xhigh/max/ultra；Copilot: low/medium/high/xhigh（max/ultra→xhigh）。空字符串则不设置 |
+| `agent-extra-args` | | `""` | 额外 CLI 参数 |
 | `issue-number` | | `""` | Issue 编号，通常自动推断 |
 | `bot-name` | | `""` | 从评论正文中剥离的 bot mention |
 | `initial-comment-body` | | 见 action.yml | 开始分析时的评论正文 |

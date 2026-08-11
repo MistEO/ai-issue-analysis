@@ -41,7 +41,7 @@ jobs:
           # --- 通用配置 ---
           github-token: ${{ secrets.GITHUB_TOKEN }}
           bot-name: "@github-actions"
-          # agent-extra-args: "--reasoning-effort xhigh"  # 可选，传递给 agent CLI 的额外参数
+          reasoning-effort: xhigh  # 思考等级，默认 xhigh；Claude: --effort / Codex: model_reasoning_effort / Copilot: --reasoning-effort
 
       - name: Show outputs
         if: always()
