@@ -106,7 +106,7 @@ api-key: |
 |------|------|--------|------|
 | `agent` | ✅ | — | AI agent：`copilot` / `claude` / `codex` |
 | `api-key` | ✅ | — | Agent 认证密钥，支持多个（每行一个，随机选取） |
-| `github-token` | ✅ | — | 用于创建和更新 Issue 评论 |
+| `github-token` | ✅ | — | 用于创建和更新 Issue 评论，并提供给 agent 调用 `gh` / GitHub API |
 | `api-base-url` | | `""` | 自定义 API 端点，建议通过 `secrets.API_BASE_URL` 传入 |
 | `model` | | `""` | 模型名 |
 | `agent-package` | | `""` | 自定义 npm 包名，留空使用 agent 默认值 |

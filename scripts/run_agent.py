@@ -133,7 +133,14 @@ def main() -> None:
 
     # --- launch agent ---
     Path(output_file).write_text("", encoding="utf-8")
-    run_env = {**os.environ, **agent_env}
+    # gh in GitHub Actions requires GH_TOKEN specifically and will not
+    # fall back to the automatically provided GITHUB_TOKEN.
+    run_env = {
+        **os.environ,
+        **agent_env,
+        "GH_TOKEN": github_token,
+        "GITHUB_TOKEN": github_token,
+    }
 
     output_fh = open(output_file, "w", encoding="utf-8")
     try:

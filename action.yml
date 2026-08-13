@@ -39,7 +39,7 @@ inputs:
     required: false
     default: ""
   github-token:
-    description: GitHub token used to create and update issue comments.
+    description: GitHub token used to create/update issue comments and for the agent to call `gh` / the GitHub API.
     required: true
   bot-name:
     description: Bot mention to strip from issue_comment messages.
@@ -164,6 +164,7 @@ runs:
         AGENT_PACKAGE: ${{ inputs.agent-package }}
         AGENT_EXTRA_ARGS: ${{ inputs.agent-extra-args }}
         COMMENT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         COMMENT_ID: ${{ steps.initial_comment.outputs.comment-id }}
         ISSUE_NUMBER: ${{ steps.prepare.outputs.issue_number }}
