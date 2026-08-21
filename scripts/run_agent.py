@@ -9,6 +9,8 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -23,18 +25,41 @@ def select_api_key(raw: str) -> tuple[str, int]:
 
 
 def update_comment(body_file: str, repo: str, comment_id: str, token: str) -> None:
+    """Patch the streaming comment via the GitHub API.
+
+    The request is sent with urllib instead of shelling out to curl:
+    passing the JSON payload as a command-line argument hits the Linux
+    per-argument limit (MAX_ARG_STRLEN, 128 KiB) once the streamed agent
+    output grows large enough, failing with "Argument list too long".
+    """
     body = Path(body_file).read_text(encoding="utf-8")
-    subprocess.run(
-        [
-            "curl", "-s", "-L", "-X", "PATCH",
-            "-H", f"Authorization: token {token}",
-            "-H", "Accept: application/vnd.github.v3+json",
-            f"https://api.github.com/repos/{repo}/issues/comments/{comment_id}",
-            "-d", json.dumps({"body": body}),
-        ],
-        check=False,
-        capture_output=True,
+    data = json.dumps({"body": body}).encode("utf-8")
+    url = f"https://api.github.com/repos/{repo}/issues/comments/{comment_id}"
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="PATCH",
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+            "User-Agent": "ai-issue-analysis",
+        },
     )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        print(
+            f"Warning: comment update failed: HTTP {exc.code}: {detail}",
+            file=sys.stderr,
+        )
+    except urllib.error.URLError as exc:
+        print(
+            f"Warning: comment update failed: {exc.reason}",
+            file=sys.stderr,
+        )
 
 
 def build_streaming_body(
@@ -171,7 +196,13 @@ def main() -> None:
             action_link, extra_content,
         )
         Path(body_file).write_text(body, encoding="utf-8")
-        update_comment(body_file, repo, comment_id, github_token)
+        # A single failed comment update must never kill the monitoring
+        # loop while the agent is still running.
+        try:
+            update_comment(body_file, repo, comment_id, github_token)
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"Warning: comment update error: {exc}", file=sys.stderr)
+            return
         last_content = current
         print(f"Comment updated at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
