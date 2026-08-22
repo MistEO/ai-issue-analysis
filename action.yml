@@ -122,7 +122,7 @@ runs:
   steps:
     - name: Checkout repository
       if: ${{ inputs.checkout-repository == 'true' }}
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Prepare (issue number, prompt, runtime paths)
       id: prepare
@@ -144,7 +144,7 @@ runs:
 
     - name: Create initial comment
       id: initial_comment
-      uses: peter-evans/create-or-update-comment@v4
+      uses: peter-evans/create-or-update-comment@v5
       with:
         issue-number: ${{ steps.prepare.outputs.issue_number }}
         token: ${{ inputs.github-token }}
