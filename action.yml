@@ -56,8 +56,12 @@ inputs:
     description: Link text for the current GitHub Actions run.
     required: false
     default: GitHub Action 运行记录
+  publish-execution-log:
+    description: Publish raw execution logs in issue comments during and after analysis. Opt-in debugging only; logs may contain sensitive data.
+    required: false
+    default: "false"
   details-summary:
-    description: Summary text for the collapsible streaming output block.
+    description: Summary text for the collapsible log block when publish-execution-log is true.
     required: false
     default: 点击此处展开分析过程
   prompt-template:
@@ -69,7 +73,7 @@ inputs:
     required: false
     default: 补充要求：{{comment_body}}
   stream-update-interval-seconds:
-    description: Seconds between streamed comment updates.
+    description: Seconds between streamed comment updates when publish-execution-log is true.
     required: false
     default: "30"
   cache-dir:
@@ -153,7 +157,7 @@ runs:
           ---
           ${{ steps.prepare.outputs.action_link }}
 
-    - name: Run agent analysis with streaming updates
+    - name: Run agent analysis
       shell: bash
       env:
         AGENT_NAME: ${{ inputs.agent }}
@@ -178,6 +182,7 @@ runs:
         DETAILS_BEGIN: ${{ steps.prepare.outputs.details_begin }}
         DETAILS_END: ${{ steps.prepare.outputs.details_end }}
         STREAM_UPDATE_INTERVAL: ${{ inputs.stream-update-interval-seconds }}
+        PUBLISH_EXECUTION_LOG: ${{ inputs.publish-execution-log }}
         EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
       run: python "${{ github.action_path }}/scripts/run_agent.py"
 
@@ -201,6 +206,7 @@ runs:
         DETAILS_BEGIN: ${{ steps.prepare.outputs.details_begin }}
         DETAILS_END: ${{ steps.prepare.outputs.details_end }}
         EXTRA_COMMENT_CONTENT: ${{ inputs.extra-comment-content }}
+        PUBLISH_EXECUTION_LOG: ${{ inputs.publish-execution-log }}
         RESULT_ERROR_MESSAGE: ${{ inputs.result-error-message }}
         PROCESS_ERROR_MESSAGE: ${{ inputs.process-error-message }}
       run: python "${{ github.action_path }}/scripts/finalize.py"

@@ -6,6 +6,8 @@ import os
 import uuid
 from pathlib import Path
 
+from comment_body import build_comment
+
 
 def read_or(path: Path, fallback: str) -> str:
     if path.is_file():
@@ -52,6 +54,7 @@ def main() -> None:
     details_end = os.environ["DETAILS_END"]
     extra_content = os.environ.get("EXTRA_COMMENT_CONTENT", "")
     result_error = os.environ.get("RESULT_ERROR_MESSAGE", "Analysis error.")
+    publish_execution_log = os.environ.get("PUBLISH_EXECUTION_LOG", "false").strip().lower() == "true"
 
     comment_url = (
         f"{server_url}/{repository}/issues/{issue_number}#issuecomment-{comment_id}"
@@ -61,16 +64,20 @@ def main() -> None:
 
     # --- build final comment ---
     conclusion = read_or(answer_file, result_error).rstrip("\n")
-    raw_output = read_or(output_file, "No agent output captured.")
-
-    truncated_output = raw_output
-    if len(truncated_output) > 55000:
-        truncated_output = truncated_output[:55000] + "\n\n[truncated for comment size limit]"
-
-    parts = [conclusion, "", "---", "", details_begin, "", "```text", truncated_output, "```", "", details_end, "", action_link]
-    if extra_content:
-        parts += ["", extra_content]
-    final_comment_file.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    if not conclusion.strip():
+        conclusion = result_error
+    raw_output = (
+        read_or(output_file, "No agent output captured.")
+        if publish_execution_log
+        else None
+    )
+    comment = build_comment(
+        conclusion, action_link, extra_content,
+        execution_log=raw_output,
+        details_begin=details_begin,
+        details_end=details_end,
+    )
+    final_comment_file.write_text(comment + "\n", encoding="utf-8")
 
     # --- write artifact files ---
     exec_log = read_or(exec_log_file, f"Execution log not found: {exec_log_file}")

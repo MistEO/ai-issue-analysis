@@ -1,6 +1,6 @@
 # ai-issue-analysis
 
-一个通用的 GitHub action，在 Issue 打开或被评论时自动调用 AI coding agent（Claude / Codex / Copilot）进行分析，并把分析过程和最终结论持续回写到同一条评论里。
+一个通用的 GitHub action，在 Issue 打开或被评论时自动调用 AI coding agent（Claude / Codex / Copilot）进行分析，默认在同一条评论里展示初始状态和最终结论，完整执行日志保留在 Actions 运行记录和 artifacts 中。
 
 实战效果展示：
 
@@ -100,6 +100,23 @@ api-key: |
   ${{ secrets.API_KEY_3 }}
 ```
 
+## 评论与调试日志
+
+默认不会向 Issue 评论追加原始执行日志（包括 prompt、工具调用、命令输出和 agent 的过程文本）。分析期间保留初始状态和运行链接；完成后更新为最终结论、运行链接和可选的 `extra-comment-content`。结论文件缺失或为空时显示错误提示，不会用执行日志代替结论。
+
+如确实需要把过程公开到评论中，可显式开启调试模式：
+
+```yaml
+publish-execution-log: "true"
+```
+
+该开关同时控制运行中的流式更新和最终评论。调试日志会经过 HTML 转义，避免日志中的代码围栏或 `</details>` 破坏折叠块；评论优先保留结论，并在剩余长度预算内展示最新日志。整条评论预算为 60,000 字符，结论本身过长时改为提示读取 artifact，不截断 Markdown 结构。完整日志与结论 artifact 不受评论裁剪影响。
+
+> [!WARNING]
+> 调试模式会主动公开原始执行日志，折叠不等于保密。即使不开启，Actions 日志、输出和 artifacts 仍受仓库访问权限控制；不要把敏感数据输出到这些位置。
+
+修改仅影响后续运行，不会自动清理已经发布的旧评论。
+
 ## 输入说明
 
 | 参数 | 必填 | 默认值 | 说明 |
@@ -116,10 +133,11 @@ api-key: |
 | `bot-name` | | `""` | 从评论正文中剥离的 bot mention |
 | `initial-comment-body` | | 见 action.yml | 开始分析时的评论正文 |
 | `action-link-text` | | `GitHub Action 运行记录` | 评论中的运行链接文字 |
-| `details-summary` | | `点击此处展开分析过程` | 折叠块标题 |
+| `publish-execution-log` | | `false` | 是否公开原始执行日志，同时控制流式更新和最终评论；仅调试时显式开启 |
+| `details-summary` | | `点击此处展开分析过程` | 开启日志发布时的折叠块标题 |
 | `prompt-template` | | 见 action.yml | 基础提示词模板 |
 | `comment-prompt-template` | | 见 action.yml | 评论补充要求模板 |
-| `stream-update-interval-seconds` | | `30` | 流式更新间隔（秒） |
+| `stream-update-interval-seconds` | | `30` | 开启日志发布时的流式更新间隔（秒） |
 | `answer-file` | | `answer.md` | Agent 写入最终结论的文件路径 |
 | `checkout-repository` | | `true` | 是否自动 checkout |
 | `process-error-message` | | 见 action.yml | 分析过程错误的回退消息 |
@@ -164,6 +182,17 @@ api-key: |
 - action 内部自动 checkout 调用方仓库（可通过 `checkout-repository: false` 关闭）
 - 自动安装对应 agent 的 CLI
 - Claude 和 Codex 会自动处理 `.claude` / `.codex` skill 目录的互联（symlink）
-- 先创建一条评论，然后在分析过程中持续流式更新
-- 最终评论包含结论 + 完整分析过程折叠块 + Actions 运行链接
+- 先创建一条初始状态评论；默认不向评论流式发布原始执行日志
+- 最终评论默认只包含结论、Actions 运行链接和可选的额外内容
+- 显式设置 `publish-execution-log: true` 才会流式发布日志，并在最终评论中附加安全转义的日志折叠块
 - 上传 agent 输出和最终结论两个 artifacts
+
+## 本地测试
+
+使用 Python 3.10+，无需安装额外依赖：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+测试覆盖默认不公开日志、调试日志转义、评论长度预算、失败回退和完整 artifacts 保留。所有 agent 与评论 API 调用均在测试中模拟，不消耗 API 用量，也不会修改 GitHub 评论。

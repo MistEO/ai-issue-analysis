@@ -1,4 +1,4 @@
-"""Phase 2: install CLI, configure agent, run with streaming comment updates."""
+"""Phase 2: install and run the agent, with opt-in execution-log comments."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents import get_agent
+from comment_body import build_comment
 
 
 def select_api_key(raw: str) -> tuple[str, int]:
@@ -69,24 +70,13 @@ def build_streaming_body(
     details_end: str,
     action_link: str,
     extra: str,
-    max_len: int = 55000,
 ) -> str:
-    if len(content) > max_len:
-        content = content[:max_len] + "\n\n[truncated for comment size limit]"
-
-    parts = [
-        initial_body, "",
-        "---", "",
-        details_begin, "",
-        "```text",
-        content,
-        "```", "",
-        details_end, "",
-        action_link,
-    ]
-    if extra:
-        parts += ["", extra]
-    return "\n".join(parts)
+    return build_comment(
+        initial_body, action_link, extra,
+        execution_log=content,
+        details_begin=details_begin,
+        details_end=details_end,
+    )
 
 
 def main() -> None:
@@ -115,6 +105,7 @@ def main() -> None:
     details_end = os.environ["DETAILS_END"]
     interval = int(os.environ.get("STREAM_UPDATE_INTERVAL", "30"))
     extra_content = os.environ.get("EXTRA_COMMENT_CONTENT", "")
+    publish_execution_log = os.environ.get("PUBLISH_EXECUTION_LOG", "false").strip().lower() == "true"
 
     agent = get_agent(agent_name)
     api_key, key_count = select_api_key(api_key_raw)
@@ -186,6 +177,8 @@ def main() -> None:
 
     def _try_update() -> None:
         nonlocal last_content
+        if not publish_execution_log:
+            return
         if not Path(output_file).is_file():
             return
         current = Path(output_file).read_text(encoding="utf-8")
